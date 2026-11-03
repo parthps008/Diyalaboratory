@@ -5,13 +5,13 @@ $db_url = getenv('DATABASE_URL') ?: getenv('MYSQL_URL');
 
 if ($db_url) {
     $parsed_url = parse_url($db_url);
-    $servername = $parsed_url['host'] ?? 'localhost';
+    $servername = $parsed_url['host'] ?? '127.0.0.1';
     $port       = isset($parsed_url['port']) ? (int)$parsed_url['port'] : 3306;
     $username   = $parsed_url['user'] ?? 'root';
     $password   = $parsed_url['pass'] ?? '';
     $database   = isset($parsed_url['path']) ? ltrim($parsed_url['path'], '/') : 'diya_laboratory';
 } else {
-    $servername = getenv('DB_HOST') ?: "localhost";
+    $servername = getenv('DB_HOST') ?: "127.0.0.1";
     $username   = getenv('DB_USER') ?: "root";
     $password   = getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : "";
     $database   = getenv('DB_NAME') ?: "diya_laboratory";
@@ -40,6 +40,15 @@ if ($use_ssl) {
     $connected = @mysqli_real_connect($conn, $servername, $username, $password, $database, $port, NULL, MYSQLI_CLIENT_SSL);
 } else {
     $connected = @mysqli_real_connect($conn, $servername, $username, $password, $database, $port);
+    // If connecting to 127.0.0.1 failed, try localhost socket (or vice versa)
+    if (!$connected && ($servername === "127.0.0.1" || $servername === "localhost")) {
+        $alt_host = ($servername === "127.0.0.1") ? "localhost" : "127.0.0.1";
+        $conn = mysqli_init();
+        $connected = @mysqli_real_connect($conn, $alt_host, $username, $password, $database, $port);
+        if ($connected) {
+            $servername = $alt_host;
+        }
+    }
 }
 
 // Fallback: If database doesn't exist yet, attempt to connect to host and create it
