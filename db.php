@@ -1,5 +1,6 @@
 <?php
-// Database configuration with environment variable support for cloud deployment (Render, Railway, etc.)
+// Disable default fatal exceptions in PHP 8.2 so connection fallback logic can run
+mysqli_report(MYSQLI_REPORT_OFF);
 
 $db_url = getenv('DATABASE_URL') ?: getenv('MYSQL_URL');
 
@@ -20,7 +21,7 @@ if ($db_url) {
 
 $conn = mysqli_init();
 if (!$conn) {
-    die("mysqli_init failed");
+    die("Database error: mysqli_init failed");
 }
 
 $use_ssl = (
@@ -29,6 +30,9 @@ $use_ssl = (
     strpos($servername, 'tidbcloud.com') !== false || 
     strpos($servername, 'aivencloud.com') !== false
 );
+
+// 5 second connection timeout
+mysqli_options($conn, MYSQLI_OPT_CONNECT_TIMEOUT, 5);
 
 if ($use_ssl) {
     $ca_path = getenv('MYSQL_ATTR_SSL_CA') ?: '/etc/ssl/certs/ca-certificates.crt';
@@ -39,11 +43,14 @@ if ($use_ssl) {
     }
     $connected = @mysqli_real_connect($conn, $servername, $username, $password, $database, $port, NULL, MYSQLI_CLIENT_SSL);
 } else {
+    // Try primary connection
     $connected = @mysqli_real_connect($conn, $servername, $username, $password, $database, $port);
-    // If connecting to 127.0.0.1 failed, try localhost socket (or vice versa)
+
+    // If local connection failed, try alternate host (127.0.0.1 <-> localhost)
     if (!$connected && ($servername === "127.0.0.1" || $servername === "localhost")) {
         $alt_host = ($servername === "127.0.0.1") ? "localhost" : "127.0.0.1";
         $conn = mysqli_init();
+        mysqli_options($conn, MYSQLI_OPT_CONNECT_TIMEOUT, 5);
         $connected = @mysqli_real_connect($conn, $alt_host, $username, $password, $database, $port);
         if ($connected) {
             $servername = $alt_host;
@@ -51,9 +58,10 @@ if ($use_ssl) {
     }
 }
 
-// Fallback: If database doesn't exist yet, attempt to connect to host and create it
+// Fallback: If database doesn't exist yet, connect to host to create it
 if (!$connected) {
     $fallback = mysqli_init();
+    mysqli_options($fallback, MYSQLI_OPT_CONNECT_TIMEOUT, 5);
     if ($use_ssl) {
         $temp_connected = @mysqli_real_connect($fallback, $servername, $username, $password, null, $port, NULL, MYSQLI_CLIENT_SSL);
     } else {
@@ -75,7 +83,12 @@ if (!$connected) {
 }
 
 if (!$connected) {
-    die("Database Connection failed: " . mysqli_connect_error());
+    die("<div style='font-family:Arial,sans-serif;padding:30px;max-width:600px;margin:50px auto;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;box-shadow:0 4px 6px rgba(0,0,0,0.05);'>
+        <h3 style='color:#dc2626;margin-top:0;'>Database Connection Failed</h3>
+        <p>Could not connect to database on <code>" . htmlspecialchars($servername) . ":" . htmlspecialchars((string)$port) . "</code>.</p>
+        <p><strong>Error:</strong> " . htmlspecialchars(mysqli_connect_error()) . "</p>
+        <p style='color:#64748b;font-size:14px;margin-bottom:0;'>If you are using a cloud database, please verify your DB_HOST, DB_USER, DB_PASSWORD, and DB_PORT on Render.</p>
+    </div>");
 }
 
 // Auto-initialize required tables if not already present
