@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: diyalaboratory
+    env: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: 80
+      # Optional external database connection settings:
+      # If not set, the app will run its built-in database automatically!
+      # - key: DB_HOST
+      #   value: your-db-host
+      # - key: DB_USER
+      #   value: your-db-user
+      # - key: DB_PASSWORD
+      #   value: your-db-password
+      # - key: DB_NAME
+      #   value: diya_laboratory
+      # - key: DB_PORT
+      #   value: 3306
